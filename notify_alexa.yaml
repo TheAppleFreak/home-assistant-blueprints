@@ -1,0 +1,65 @@
+blueprint:
+  name: Notify Alexa
+  domain: script
+  homeassistant:
+    min_version: 2023.6.0
+  author: TheAppleFreak
+  source_url: https://github.com/TheAppleFreak/home-assistant-blueprints/blob/main/notify_alexa.yaml
+  description: >
+    Send a TTS notification to Alexa devices.
+fields: 
+  notify_devices:
+    name: Device to notify
+    description: If not specified, then all devices will receive the notification.
+    required: false
+    selector:
+      device:
+        entity:
+          - integration: alexa_media
+        multiple: true
+  title: 
+    name: Title
+    description: The title to display. Only works for Announce and Mobile Push.
+    required: false
+    selector:
+      text: 
+  message:
+    name: Message
+    description: The TTS message. When using Announce, SSML markup is supported.
+    required: true
+    selector:
+      text:
+  notification_type:
+    name: Notification type
+    description: The type of notification to send out.
+    required: true
+    selector:
+      select: 
+        options: 
+          - label: TTS (does not play chime before message)
+            value: tts
+          - label: Announce (plays chime before message)
+            value: announce
+          - label: Mobile Push
+            value: push
+sequence:
+  - variables:
+      target_entities: >
+        {% if notify_devices is defined %}
+          {% set ns = namespace(entities=[]) %}
+          {% set entities = notify_devices | map("device_entities") | list %}
+          {% for entity_list in entities %}
+            {% set ns.entities = ns.entities + (entity_list | select("contains", "media_player.") | list) %}
+          {% endfor %}
+          {% set target_entities = ns.entities %}
+        {% else %}
+          {% set target_entities = integration_entities("alexa_media") | select("contains", "media_player") | list %}
+        {% endif %}
+        {{ target_entities }}
+  - service: notify.alexa_media
+    data: 
+      title: "{{title}}"
+      message: "{{message}}"
+      data:
+        type: "{{notification_type}}"
+      target: "{{target_entities}}"
