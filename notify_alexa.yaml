@@ -5,11 +5,10 @@ blueprint:
     min_version: 2023.6.0
   author: TheAppleFreak
   source_url: https://github.com/TheAppleFreak/home-assistant-blueprints/blob/main/notify_alexa.yaml
-  description: >
-    Send a TTS notification to Alexa devices.
+  description: Send a TTS notification to Alexa devices.
 icon: mdi:bullhorn
 fields: 
-  notify_devices:
+  devices:
     name: Device to notify
     description: If not specified, then all devices will receive the notification.
     required: false
@@ -30,7 +29,7 @@ fields:
     required: true
     selector:
       text:
-  notification_type:
+  type:
     name: Notification type
     description: The type of notification to send out.
     required: true
@@ -46,9 +45,9 @@ fields:
 sequence:
   - variables:
       target_entities: >
-        {% if notify_devices is defined %}
+        {% if devices is defined %}
           {% set ns = namespace(entities=[]) %}
-          {% set entities = notify_devices | map("device_entities") | list %}
+          {% set entities = devices | map("device_entities") | list %}
           {% for entity_list in entities %}
             {% set ns.entities = ns.entities + (entity_list | select("contains", "media_player.") | list) %}
           {% endfor %}
@@ -62,5 +61,5 @@ sequence:
       title: "{{title}}"
       message: "{{message}}"
       data:
-        type: "{{notification_type}}"
+        type: "{{type}}"
       target: "{{target_entities}}"
