@@ -7,7 +7,7 @@ blueprint:
   source_url: https://github.com/TheAppleFreak/home-assistant-blueprints/blob/main/notify_alexa.yaml
   description: >
     Send a TTS notification to Alexa devices.
-icon: mdi:bullhorn-variant
+icon: mdi:bullhorn
 fields: 
   notify_devices:
     name: Device to notify
