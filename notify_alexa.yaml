@@ -58,7 +58,7 @@ sequence:
         {{ target_entities }}
   - service: notify.alexa_media
     data: 
-      title: "{{title}}"
+      title: "{% if title is defined %}{{ title }}{% endif %}"
       message: "{{message}}"
       data:
         type: "{{type}}"
