@@ -32,6 +32,9 @@ blueprint:
     
 
     Despite what the UI says, there is no response variable support.
+
+
+    As a reminder, **you will need to create the script first before you will see the configuration options listed above.**
 icon: mdi:bullhorn
 fields: 
   devices:
