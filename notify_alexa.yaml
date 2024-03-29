@@ -5,12 +5,38 @@ blueprint:
     min_version: 2023.6.0
   author: TheAppleFreak
   source_url: https://github.com/TheAppleFreak/home-assistant-blueprints/blob/main/notify_alexa.yaml
-  description: Send a TTS notification to Alexa devices.
+  description: >
+    # Notify Alexa Blueprint
+
+    This blueprint allows you to more easily access the features exposed by the [Alexa Media Player](https://github.com/custom-components/alexa_media_player/wiki/Configuration) custom integration. This gives you an easy GUI-driven way to configure its options, as well as to select which devices will receive the messages.
+
+    ## Setup
+
+    Before you do anything else, make sure that you install the [Alexa Media Player custom component](https://github.com/custom-components/alexa_media_player) (available through HACS) and [configure it accordingly](https://github.com/custom-components/alexa_media_player/wiki/Configuration)! Without this, this blueprint won't work at all.
+
+    
+
+    **There's no configuration available on this screen**; you'll need to create a new script from this blueprint first (make sure to give it a memorable name)! Once done, you can call the script using the "call service" action in automations, which should then present you with four potential options.
+
+    ![Screenshot of a script created from this blueprint](https://community-assets.home-assistant.io/original/4X/a/9/3/a93019ad683ec892b461e29545221b3e35c08052.png)
+
+    There are four primary options available:
+
+    * **Device(s) to send message to** - This lets you selectively send a message to specific Alexa devices. You can select as many devices as you want. If not specified, the message will be sent to all Alexa devices available.
+    
+    * **Title** - The title to show with the message. Only available with Announce and Mobile Push, and only shows on devices with a screen.
+    
+    * **Message** - The actual message to be read out using TTS. When the type is set to "Announce," [Amazon's flavor of SSML markup can be used](https://developer.amazon.com/en-US/docs/alexa/custom-skills/speech-synthesis-markup-language-ssml-reference.html) to direct hwo the message should be read out.  
+    
+    * **Notification type** - A selection between three different message types. TTS won't play a chime before messages, Announce will play a chime, and Mobile Push sends a push notification to phones. 
+    
+
+    Despite what the UI says, there is no response variable support.
 icon: mdi:bullhorn
 fields: 
   devices:
-    name: Device to notify
-    description: If not specified, then all devices will receive the notification.
+    name: Device(s) to send message to
+    description: If not specified, then all Alexa devices will receive the message.
     required: false
     selector:
       device:
@@ -19,7 +45,7 @@ fields:
         multiple: true
   title: 
     name: Title
-    description: The title to display. Only works for Announce and Mobile Push.
+    description: The title to display on devices with a screen. Only works when the message type is set to Announce or Mobile Push.
     required: false
     selector:
       text: 
@@ -40,7 +66,7 @@ fields:
             value: tts
           - label: Announce (plays chime before message)
             value: announce
-          - label: Mobile Push
+          - label: Mobile Push (requires the Alexa app to be installed on a phone)
             value: push
 sequence:
   - variables:
