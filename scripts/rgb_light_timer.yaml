@@ -1,0 +1,273 @@
+alias: RGB Light Timer
+description: >-
+  A timer script that shows the time progress on an RGB light bulb (with
+  transition and early exit support).
+
+
+fields:
+  target_devices:
+    selector:
+      target:
+        entity:
+          - domain: light
+    required: true
+    name: Device
+    description: Must be an RGB light that supports transitions
+  timer_length:
+    selector:
+      duration: {}
+    default:
+      hours: 0
+      minutes: 8
+      seconds: 0
+    required: true
+    name: Timer length
+  colors:
+    selector:
+      object:
+        fields:
+          color:
+            required: true
+            selector:
+              color_rgb: {}
+        multiple: true
+    default:
+      - color:
+          - 0
+          - 255
+          - 0
+      - color:
+          - 255
+          - 0
+          - 0
+    name: Colors
+    description: The colors to fade between. There must be at least two colors.
+    required: true
+  timer_helper_entity:
+    selector:
+      entity:
+        filter:
+          domain: timer
+    name: Timer helper entity
+    description: >-
+      An optional timer entity to synchronize with. Also allows for stopping
+      this timer script early
+  progress_blink_count:
+    selector:
+      number:
+        min: 0
+        max: 10
+    default: 5
+    name: Progress blink count
+    description: >-
+      How many times the progress colors should blink while the timer is
+      running.
+  progress_blink_duration:
+    selector:
+      duration:
+        enable_millisecond: true
+    default:
+      hours: 0
+      minutes: 0
+      seconds: 0
+      milliseconds: 500
+    name: Progress blink duration
+    description: How long each progress blink should last
+  ending_blink_count:
+    selector:
+      number:
+        min: 0
+        max: 20
+    default: 10
+    name: Ending blink count
+    description: How many times the end color should blink when the timer completes.
+  ending_blink_duration:
+    selector:
+      duration:
+        enable_millisecond: true
+    default:
+      hours: 0
+      minutes: 0
+      seconds: 1
+      milliseconds: 0
+    name: Ending blink duration
+    description: How long each ending blink should last
+
+sequence:
+  - variables:
+      entities: >-
+        {{target_devices.entity_id if target_devices.entity_id is list else []
+        if [target_devices.entity_id] is defined else []}}
+      areas: >-
+        {{(target_devices.area_id | map('area_entities') | list) | sum(start=[])
+        if target_devices.area_id is list else
+        area_entities(target_devices.area_id)}}
+      devices: >-
+        {{(target_devices.device_id | map('device_entities') | list) |
+        sum(start=[]) if target_devices.device_id is list else
+        device_entities(target_devices.device_id) }}
+      labels: >-
+        {{(target_devices.label_id | map('label_entities') | list) |
+        sum(start=[]) if target_devices.label_id is list else
+        label_entities(target_devices.label_id) }}
+      all_entities: >-
+        {{(entities + areas + devices + labels) | select('match', 'light.') |
+        unique | list}}
+  - variables:
+      target_entities: "{{all_entities}}"
+      colors: "{{colors | select() | list}}"
+      previous_state_scene_id: "{{ 'rgb_timer_previous_state_' ~ context.id | lower}}"
+      timer_length: >-
+        {{timedelta(hours=timer_length.hours, minutes=timer_length.minutes,
+        seconds=timer_length.seconds)}}
+      progress_blink_count: "{{progress_blink_count if progress_blink_count is defined else 5}}"
+      progress_blink_duration: |-
+        {% if progress_blink_duration is defined %}
+          {{timedelta(hours=progress_blink_duration.hours,
+          minutes=progress_blink_duration.minutes,
+          seconds=progress_blink_duration.seconds,
+          milliseconds=progress_blink_duration.milliseconds)}}
+        {% else %}
+          {{ as_timedelta('00:00:00.500') }}
+        {% endif %}
+      ending_blink_count: "{{ending_blink_count if ending_blink_count is defined else 10}}"
+      ending_blink_duration: |-
+        {% if ending_blink_duration is defined %}
+          {{timedelta(hours=ending_blink_duration.hours,
+          minutes=ending_blink_duration.minutes,
+          seconds=ending_blink_duration.seconds,
+          milliseconds=ending_blink_duration.milliseconds)}}
+        {% else %}
+          {{ as_timedelta('00:00:00.500') }}
+        {% endif %}
+      timer_color_delay: >-
+        {{ (as_timedelta(timer_length) / (colors | length - 1)) -
+        (as_timedelta(progress_blink_duration) * progress_blink_count) }}
+      early_exit_response:
+        is_early_exit: true
+      normal_exit_response:
+        is_early_exit: false
+  - if:
+      - condition: template
+        value_template: "{{ (colors | length) < 2 }}"
+    then:
+      - stop: Less than two colors defined
+        error: true
+    alias: Color count check
+    enabled: true
+  - action: scene.create
+    metadata: {}
+    data:
+      snapshot_entities: "{{all_entities}}"
+      scene_id: "{{previous_state_scene_id}}"
+    enabled: true
+  - alias: Start external timer if defined
+    if:
+      - condition: template
+        value_template: "{{ timer_helper_entity is defined }}"
+    then:
+      - action: timer.start
+        metadata: {}
+        data:
+          duration: "{{as_timedelta(timer_length)}}"
+        enabled: true
+        target:
+          entity_id: "{{ timer_helper_entity }}"
+    enabled: true
+  - alias: Repeat for each color
+    repeat:
+      for_each: "{{colors[:colors|length - 1]}}"
+      sequence:
+        - variables:
+            color: "{{ repeat.item.color }}"
+        - alias: Early exit if timer stopped externally
+          if:
+            - condition: template
+              value_template: |-
+                {% if timer_helper_entity is defined %}
+                  {{ not is_state(timer_helper_entity, "active") }} 
+                {% else %}
+                  false
+                {% endif %}
+          then:
+            - action: scene.turn_on
+              metadata: {}
+              data: {}
+              target:
+                entity_id: scene.{{previous_state_scene_id}}
+            - action: scene.delete
+              metadata: {}
+              data: {}
+              target:
+                entity_id: scene.{{previous_state_scene_id}}
+            - stop: Timer has been externally stopped
+              response_variable: early_exit_response
+        - repeat:
+            count: "{{ progress_blink_count }}"
+            sequence:
+              - action: light.turn_on
+                metadata: {}
+                data:
+                  rgb_color: "{{color}}"
+                  brightness_pct: 100
+                target:
+                  entity_id: "{{ target_entities }}"
+              - delay: "{{as_timedelta(progress_blink_duration) / 2}}"
+              - action: light.turn_on
+                metadata: {}
+                data:
+                  rgb_color: "{{color}}"
+                  brightness_pct: 50
+                target:
+                  entity_id: "{{ target_entities }}"
+              - delay: "{{as_timedelta(progress_blink_duration) / 2}}"
+          alias: Progress blinks
+        - action: light.turn_on
+          metadata: {}
+          data:
+            rgb_color: "{{color}}"
+            brightness_pct: 100
+          target:
+            entity_id: "{{ target_entities }}"
+        - action: light.turn_on
+          metadata: {}
+          data:
+            rgb_color: "{{colors[repeat.index].color}}"
+            brightness_pct: 100
+            transition: "{{ as_timedelta(timer_color_delay).seconds }}"
+          target:
+            entity_id: "{{ target_entities }}"
+        - delay: "{{as_timedelta(timer_color_delay)}}"
+    enabled: true
+  - repeat:
+      count: "{{ ending_blink_count }}"
+      sequence:
+        - action: light.turn_on
+          metadata: {}
+          data:
+            rgb_color: "{{color}}"
+            brightness_pct: 100
+          target:
+            entity_id: "{{ target_entities }}"
+        - delay: "{{as_timedelta(ending_blink_duration) / 2}}"
+        - action: light.turn_on
+          metadata: {}
+          data:
+            rgb_color: "{{color}}"
+            brightness_pct: 50
+          target:
+            entity_id: "{{ target_entities }}"
+        - delay: "{{as_timedelta(ending_blink_duration) / 2}}"
+    alias: Ending blinks
+  - action: scene.turn_on
+    target:
+      entity_id: scene.{{previous_state_scene_id}}
+    data: {}
+  - action: scene.delete
+    metadata: {}
+    data: {}
+    target:
+      entity_id: scene.{{previous_state_scene_id}}
+    enabled: true
+  - stop: Normal exit
+    response_variable: normal_exit_response
